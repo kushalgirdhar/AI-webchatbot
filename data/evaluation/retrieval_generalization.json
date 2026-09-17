@@ -1,0 +1,62 @@
+[
+  {
+    "query": "How is the natural environment defined?",
+    "expected_chunk_ids": [0]
+  },
+  {
+    "query": "Which solid outer layer surrounds Earth's mantle?",
+    "expected_chunk_ids": [6]
+  },
+  {
+    "query": "Where does the majority of Earth's water occur?",
+    "expected_chunk_ids": [7]
+  },
+  {
+    "query": "How would you describe an ocean?",
+    "expected_chunk_ids": [8]
+  },
+  {
+    "query": "What distinguishes a river from other bodies of water?",
+    "expected_chunk_ids": [10]
+  },
+  {
+    "query": "What characterizes a lake?",
+    "expected_chunk_ids": [12]
+  },
+  {
+    "query": "What effects do human activities have on water?",
+    "expected_chunk_ids": [14, 15]
+  },
+  {
+    "query": "How is Earth's atmosphere described?",
+    "expected_chunk_ids": [16]
+  },
+  {
+    "query": "How many major layers make up Earth's atmosphere?",
+    "expected_chunk_ids": [19, 20, 21, 23]
+  },
+  {
+    "query": "What does global warming mean?",
+    "expected_chunk_ids": [26, 27, 28, 29]
+  },
+  {
+    "query": "How is climate different from weather?",
+    "expected_chunk_ids": [32, 33]
+  },
+  {
+    "query": "What does the term ecosystem refer to?",
+    "expected_chunk_ids": [41, 42]
+  },
+  {
+    "query": "What are biogeochemical cycles?",
+    "expected_chunk_ids": [46, 47, 48]
+  },
+  {
+    "query": "How can wilderness be characterized?",
+    "expected_chunk_ids": [49, 50]
+  },
+  {
+    "query": "Which organisms are considered wildlife?",
+    "expected_chunk_ids": [51]
+  }
+]

@@ -5,7 +5,6 @@ from app.chunking.chunker import (
     create_chunks_from_section,
 )
 
-
 INPUT_FILE = "data/markdown/natural_environment.md"
 OUTPUT_FILE = "data/chunks/natural_environment.json"
 
@@ -22,22 +21,16 @@ def main():
     all_chunks = []
 
     for section in sections:
-        chunks = create_chunks_from_section(
-            section,
-            chunk_size=800,
-            overlap=100
-        )
+        chunks = create_chunks_from_section(section, chunk_size=800, overlap=100)
 
         all_chunks.extend(chunks)
 
+    for chunk_id, chunk in enumerate(all_chunks):
+        chunk["id"] = chunk_id
+
     # Save chunks
     with open(OUTPUT_FILE, "w", encoding="utf-8") as file:
-        json.dump(
-            all_chunks,
-            file,
-            ensure_ascii=False,
-            indent=2
-        )
+        json.dump(all_chunks, file, ensure_ascii=False, indent=2)
 
     print(f"Total chunks: {len(all_chunks)}")
     print(f"Chunks saved to: {OUTPUT_FILE}")

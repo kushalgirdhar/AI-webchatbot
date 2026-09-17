@@ -1,0 +1,82 @@
+[
+  {
+    "query": "What is the natural environment?",
+    "expected_chunk_ids": [0]
+  },
+  {
+    "query": "What are the components of the natural environment?",
+    "expected_chunk_ids": [0, 1]
+  },
+  {
+    "query": "What is the difference between natural and built environments?",
+    "expected_chunk_ids": [2]
+  },
+  {
+    "query": "What are the four spheres of Earth?",
+    "expected_chunk_ids": [4]
+  },
+  {
+    "query": "What is the lithosphere?",
+    "expected_chunk_ids": [6]
+  },
+  {
+    "query": "Where is most of Earth's water found?",
+    "expected_chunk_ids": [7]
+  },
+  {
+    "query": "What is an ocean?",
+    "expected_chunk_ids": [8]
+  },
+  {
+    "query": "What is a river?",
+    "expected_chunk_ids": [10]
+  },
+  {
+    "query": "What is a lake?",
+    "expected_chunk_ids": [12]
+  },
+  {
+    "query": "How do humans impact water?",
+    "expected_chunk_ids": [14, 15]
+  },
+  {
+    "query": "What is the atmosphere?",
+    "expected_chunk_ids": [16]
+  },
+  {
+    "query": "What are the principal layers of Earth's atmosphere?",
+    "expected_chunk_ids": [19, 20, 21, 23]
+  },
+  {
+    "query": "What is global warming?",
+    "expected_chunk_ids": [26, 27, 28, 29]
+  },
+  {
+    "query": "What is climate?",
+    "expected_chunk_ids": [32, 33]
+  },
+  {
+    "query": "What is weather?",
+    "expected_chunk_ids": [34, 35]
+  },
+  {
+    "query": "What is life on Earth?",
+    "expected_chunk_ids": [38, 39, 40]
+  },
+  {
+    "query": "What is an ecosystem?",
+    "expected_chunk_ids": [41, 42]
+  },
+  {
+    "query": "What are biogeochemical cycles?",
+    "expected_chunk_ids": [46, 47, 48]
+  },
+  {
+    "query": "What is wilderness?",
+    "expected_chunk_ids": [49, 50]
+  },
+  {
+    "query": "What does wildlife include?",
+    "expected_chunk_ids": [51]
+  }
+]
