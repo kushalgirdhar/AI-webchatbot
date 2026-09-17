@@ -1,3 +1,5 @@
+# This is a .gitignore file that specifies which files and directories should be ignored by Git version control. 
+# It includes patterns for Python files, virtual environments, environment variables, Qdrant storage, model/cache files, generated data, IDE configurations, and operating system files.
 # Python
 __pycache__/
 *.py[cod]
