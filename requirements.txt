@@ -1,0 +1,10 @@
+requests
+beautifulsoup4
+playwright
+sentence-transformers
+qdrant-client
+fastapi
+uvicorn
+streamlit
+python-dotenv
+markdown

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+myenv/
+venv/
+.venv/
+
+# Environment variables
+.env
+.env.*
+
+# Qdrant local storage
+qdrant_storage/
+
+# Local Qdrant binary
+qdrant
+
+# Model/cache files
+models/
+.cache/
+huggingface_cache/
+
+# Generated data
+data/raw/
+data/chunks/
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
