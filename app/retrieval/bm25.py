@@ -19,8 +19,11 @@ class BM25Retriever:
         # Tokenize documents
         self.tokenized_documents = [tokenize(text) for text in self.searchable_texts]
 
-        # Create BM25 index
-        self.bm25 = BM25Okapi(self.tokenized_documents)
+        # Create BM25 index safely
+        if self.tokenized_documents:
+            self.bm25 = BM25Okapi(self.tokenized_documents)
+        else:
+            self.bm25 = None
 
     @staticmethod
     def _build_search_text(chunk):
@@ -51,6 +54,9 @@ class BM25Retriever:
         Search the indexed chunks and return the top K results.
         Returns an empty list for empty, invalid, or stop-word-only queries.
         """
+        if not self.bm25 or not self.chunks:
+            return []
+
         # Tokenize user query
         query_tokens = tokenize(query)
         if not query_tokens:

@@ -5,6 +5,7 @@ from app.chunking.chunker import create_chunks_from_section, parse_markdown_sect
 from app.cleaner.text_cleaner import clean_markdown
 from app.markdown.converter import convert_to_markdown
 from app.retrieval.bm25 import BM25Retriever
+from app.retrieval.e5_hybrid_retriever import E5HybridRetriever
 from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.reranker import DeterministicReranker
 from app.retrieval.term_coverage import calculate_term_coverage
@@ -218,8 +219,8 @@ class TestHybridRetriever(unittest.TestCase):
         retriever.rrf_k = 60
 
         bm25_res = [
-            {"chunk": self.chunks[1], "score": 4.5},  # chunk 20 at rank 1
-            {"chunk": self.chunks[0], "score": 3.0},  # chunk 10 at rank 2
+            {"chunk": self.chunks[1], "score": 4.5},
+            {"chunk": self.chunks[0], "score": 3.0},
         ]
 
         qdrant_p1 = MagicMock(id=10, score=0.85, payload={"text": self.chunks[0]["text"], "metadata": self.chunks[0]["metadata"]})
@@ -228,9 +229,7 @@ class TestHybridRetriever(unittest.TestCase):
 
         fused = retriever.fuse_rrf(bm25_res, qdrant_res, rrf_k=60)
 
-        # Chunk 10 RRF: BM25 rank 2 (1/62) + Qdrant rank 1 (1/61)
         expected_10 = (1.0 / 62) + (1.0 / 61)
-        # Chunk 20 RRF: BM25 rank 1 (1/61) + Qdrant rank 2 (1/62)
         expected_20 = (1.0 / 61) + (1.0 / 62)
 
         self.assertAlmostEqual(fused[0]["rrf_score"], expected_10, places=6)
@@ -240,22 +239,109 @@ class TestHybridRetriever(unittest.TestCase):
         retriever = HybridRetriever.__new__(HybridRetriever)
         retriever.rrf_k = 60
 
-        # Chunk 10 is present in both BM25 and Qdrant
-        # Chunk 20 is only in BM25
         bm25_res = [
-            {"chunk": self.chunks[1], "score": 4.5},  # chunk 20 at rank 1
-            {"chunk": self.chunks[0], "score": 3.0},  # chunk 10 at rank 2
+            {"chunk": self.chunks[1], "score": 4.5},
+            {"chunk": self.chunks[0], "score": 3.0},
         ]
         qdrant_p1 = MagicMock(id=10, score=0.90, payload={"text": self.chunks[0]["text"], "metadata": self.chunks[0]["metadata"]})
         qdrant_res = [qdrant_p1]
 
         fused = retriever.fuse_rrf(bm25_res, qdrant_res, rrf_k=60)
 
-        # Chunk 10 RRF = 1/62 + 1/61 = ~0.03252
-        # Chunk 20 RRF = 1/61 + 0    = ~0.01639
         self.assertEqual(fused[0]["chunk"]["id"], 10)
         self.assertEqual(fused[1]["chunk"]["id"], 20)
         self.assertTrue(fused[0]["rrf_score"] > fused[1]["rrf_score"])
+
+
+class TestE5HybridRetriever(unittest.TestCase):
+    def setUp(self):
+        self.chunks = [
+            {
+                "id": 10,
+                "text": "Geological Activity\n\nThe lithosphere is the outermost solid crust of the planet.",
+                "metadata": {
+                    "title": "Natural Environment",
+                    "section": "Geological Activity",
+                    "heading_path": ["Natural Environment", "Geological Activity"],
+                },
+            },
+            {
+                "id": 20,
+                "text": "Cycles\n\nThe oxygen cycle occurs through the lithosphere and biosphere.",
+                "metadata": {
+                    "title": "Natural Environment",
+                    "section": "Cycles",
+                    "heading_path": ["Natural Environment", "Cycles"],
+                },
+            },
+        ]
+
+    def test_e5_rrf_scoring_math(self):
+        retriever = E5HybridRetriever.__new__(E5HybridRetriever)
+        retriever.rrf_k = 60
+
+        bm25_res = [
+            {"chunk": self.chunks[1], "score": 4.5},
+            {"chunk": self.chunks[0], "score": 3.0},
+        ]
+
+        e5_p1 = MagicMock(id=10, score=0.88, payload={"text": self.chunks[0]["text"], "metadata": self.chunks[0]["metadata"]})
+        e5_p2 = MagicMock(id=20, score=0.45, payload={"text": self.chunks[1]["text"], "metadata": self.chunks[1]["metadata"]})
+        e5_res = [e5_p1, e5_p2]
+
+        fused = retriever.fuse_rrf(bm25_res, e5_res, rrf_k=60)
+
+        expected_10 = (1.0 / 62) + (1.0 / 61)
+        expected_20 = (1.0 / 61) + (1.0 / 62)
+
+        self.assertAlmostEqual(fused[0]["rrf_score"], expected_10, places=6)
+        self.assertAlmostEqual(fused[1]["rrf_score"], expected_20, places=6)
+
+
+class TestPipelineProcessUrl(unittest.TestCase):
+    def test_pipeline_selects_e5_by_default(self):
+        from unittest.mock import patch
+        from app.pipeline import process_url
+
+        mock_content = [{"type": "paragraph", "text": "Test content about ecosystems."}]
+        with patch("app.pipeline.fetch_page", return_value="<html><body><p>Test</p></body></html>"), \
+             patch("app.pipeline.extract_ordered_content", return_value=mock_content), \
+             patch("app.pipeline.E5EmbeddingModel") as mock_e5_embedder, \
+             patch("app.pipeline.E5QdrantStore") as mock_e5_store, \
+             patch("app.pipeline.E5Retriever") as mock_e5_retriever, \
+             patch("app.pipeline.E5HybridRetriever") as mock_e5_hybrid:
+            
+            import numpy as np
+            mock_e5_instance = MagicMock()
+            mock_e5_instance.encode_documents.return_value = np.zeros((1, 768))
+            mock_e5_embedder.return_value = mock_e5_instance
+            
+            result = process_url("https://example.com/test", verbose=False)
+            self.assertEqual(result["embedding_model"], "multilingual-e5-base")
+            self.assertTrue(mock_e5_embedder.called)
+            self.assertTrue(mock_e5_store.called)
+
+    def test_pipeline_supports_bge_selection(self):
+        from unittest.mock import patch
+        from app.pipeline import process_url
+
+        mock_content = [{"type": "paragraph", "text": "Test content about ecosystems."}]
+        with patch("app.pipeline.fetch_page", return_value="<html><body><p>Test</p></body></html>"), \
+             patch("app.pipeline.extract_ordered_content", return_value=mock_content), \
+             patch("app.pipeline.EmbeddingModel") as mock_bge_embedder, \
+             patch("app.pipeline.QdrantStore") as mock_bge_store, \
+             patch("app.pipeline.QdrantRetriever") as mock_bge_retriever, \
+             patch("app.pipeline.HybridRetriever") as mock_bge_hybrid:
+            
+            import numpy as np
+            mock_bge_instance = MagicMock()
+            mock_bge_instance.encode.return_value = np.zeros((1, 1024))
+            mock_bge_embedder.return_value = mock_bge_instance
+            
+            result = process_url("https://example.com/test", embedding_model="bge", verbose=False)
+            self.assertEqual(result["embedding_model"], "BAAI/bge-m3")
+            self.assertTrue(mock_bge_embedder.called)
+            self.assertTrue(mock_bge_store.called)
 
 
 if __name__ == "__main__":

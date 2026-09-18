@@ -1,24 +1,21 @@
-from app.embeddings.embedder import EmbeddingModel
-from app.vectorstore.qdrant_store import QdrantStore
+from app.embeddings.e5_embedder import E5EmbeddingModel
+from app.vectorstore.e5_qdrant_store import E5QdrantStore
 
 
-class QdrantRetriever:
+class E5Retriever:
     """
-    Semantic retriever using BGE-M3 + Qdrant.
+    Semantic retriever using multilingual-e5-base + Qdrant.
     """
 
     def __init__(self, top_k=5, embedder=None, store=None):
-        self.embedder = embedder if embedder is not None else EmbeddingModel()
-        self.store = store if store is not None else QdrantStore()
+        self.embedder = embedder if embedder is not None else E5EmbeddingModel()
+        self.store = store if store is not None else E5QdrantStore()
         self.top_k = top_k
 
     def search(self, query, top_k=None):
         limit = top_k if top_k is not None else self.top_k
+        query_vector = self.embedder.encode_query(query)
 
-        # Convert query into a vector
-        query_vector = self.embedder.encode([query])[0]
-
-        # Search Qdrant
         results = self.store.client.query_points(
             collection_name=self.store.COLLECTION_NAME,
             query=query_vector.tolist(),
@@ -33,7 +30,7 @@ class QdrantRetriever:
 
 
 if __name__ == "__main__":
-    retriever = QdrantRetriever(top_k=5)
+    retriever = E5Retriever(top_k=5)
 
     query = "What is the lithosphere?"
 

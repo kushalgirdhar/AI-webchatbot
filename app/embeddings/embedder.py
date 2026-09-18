@@ -9,7 +9,10 @@ class EmbeddingModel:
     MODEL_NAME = "BAAI/bge-m3"
 
     def __init__(self):
-        self.model = SentenceTransformer(self.MODEL_NAME)
+        try:
+            self.model = SentenceTransformer(self.MODEL_NAME, local_files_only=True)
+        except Exception:
+            self.model = SentenceTransformer(self.MODEL_NAME)
 
     def encode(self, texts, show_progress_bar=False):
         """

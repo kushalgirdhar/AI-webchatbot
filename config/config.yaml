@@ -1,0 +1,2 @@
+storage:
+  storage_path: ./qdrant_storage
