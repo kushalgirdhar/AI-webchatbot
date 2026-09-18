@@ -49,10 +49,12 @@ class BM25Retriever:
     def search(self, query, top_k=5):
         """
         Search the indexed chunks and return the top K results.
+        Returns an empty list for empty, invalid, or stop-word-only queries.
         """
-
         # Tokenize user query
         query_tokens = tokenize(query)
+        if not query_tokens:
+            return []
 
         # Calculate BM25 scores
         scores = self.bm25.get_scores(query_tokens)
@@ -61,7 +63,6 @@ class BM25Retriever:
         top_indices = scores.argsort()[-top_k:][::-1]
 
         results = []
-
         for index in top_indices:
             results.append(
                 {

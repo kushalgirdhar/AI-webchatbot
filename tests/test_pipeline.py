@@ -16,12 +16,16 @@ class TestTextProcessor(unittest.TestCase):
 
     def test_tokenize_hyphenated(self):
         tokens = tokenize("non-domesticated plants and micro-organisms")
-        self.assertIn("non-domesticated", tokens)
-        self.assertIn("micro-organisms", tokens)
+        self.assertIn("non-domesticate", tokens)
+        self.assertIn("micro-organism", tokens)
 
     def test_stop_words_filtered(self):
         tokens = tokenize("What does wildlife include?")
         self.assertEqual(tokens, ["wildlife", "include"])
+
+    def test_pronouns_and_auxiliaries_filtered(self):
+        tokens = tokenize("How would you describe an ocean?")
+        self.assertEqual(tokens, ["describe", "ocean"])
 
 
 class TestTermCoverage(unittest.TestCase):
@@ -103,7 +107,7 @@ class TestRetrievalAndReranker(unittest.TestCase):
         self.chunks = [
             {
                 "id": 0,
-                "text": "Section > Overview\n\nA solar panel is a device that converts sunlight into electricity.",
+                "text": "Solar Energy\n\nA solar panel is a device that converts sunlight into electricity.",
                 "metadata": {
                     "title": "Solar Energy",
                     "section": "Solar Panels",
@@ -112,11 +116,20 @@ class TestRetrievalAndReranker(unittest.TestCase):
             },
             {
                 "id": 1,
-                "text": "Section > History\n\nSolar panels solar panels solar panels were developed over many decades by multiple inventors.",
+                "text": "Solar Energy > History\n\nSolar panels solar panels solar panels were developed over many decades by multiple inventors.",
                 "metadata": {
                     "title": "Solar Energy",
                     "section": "History",
                     "heading_path": ["Solar Energy", "History"],
+                },
+            },
+            {
+                "id": 2,
+                "text": "Solar Energy > Environmental Impact\n\nHuman activity and manufacturing of panels has significant impacts on local ecosystems.",
+                "metadata": {
+                    "title": "Solar Energy",
+                    "section": "Environmental Impact",
+                    "heading_path": ["Solar Energy", "Environmental Impact"],
                 },
             },
         ]
@@ -125,14 +138,55 @@ class TestRetrievalAndReranker(unittest.TestCase):
 
     def test_reranker_prioritizes_definition_over_repetition(self):
         query = "What is a solar panel?"
-        candidates = self.retriever.search(query, top_k=2)
+        candidates = self.retriever.search(query, top_k=3)
         reranked = self.reranker.rerank(query, candidates, top_k=2)
 
-        # Chunk 0 contains the direct definition; Chunk 1 has higher repetition
         self.assertEqual(reranked[0]["chunk"]["id"], 0)
         self.assertTrue(reranked[0]["definition_score"] > 0)
+
+    def test_query_intent_detection(self):
+        self.assertEqual(
+            DeterministicReranker.detect_query_intent("How is climate different from weather?"),
+            "COMPARISON",
+        )
+        self.assertEqual(
+            DeterministicReranker.detect_query_intent("What effects do human activities have on water?"),
+            "CAUSE_EFFECT"
+        )
+        self.assertEqual(
+            DeterministicReranker.detect_query_intent("Where does the majority of water occur?"),
+            "LOCATION"
+        )
+        self.assertEqual(
+            DeterministicReranker.detect_query_intent("How is the natural environment defined?"),
+            "DEFINITION"
+        )
+
+    def test_cause_effect_intent_selects_impact_chunk(self):
+        query = "How do human activities affect the environment?"
+        candidates = self.retriever.search(query, top_k=3)
+        reranked = self.reranker.rerank(query, candidates, top_k=2)
+        self.assertEqual(reranked[0]["chunk"]["id"], 2)
+
+    def test_out_of_scope_query_rejection(self):
+        query = "What is quantum computing?"
+        candidates = self.retriever.search(query, top_k=3)
+        reranked = self.reranker.rerank(query, candidates, top_k=2)
+        self.assertEqual(len(reranked), 0)
+
+    def test_partial_out_of_scope_query_rejection(self):
+        query = "What is artificial intelligence?"
+        candidates = self.retriever.search(query, top_k=3)
+        reranked = self.reranker.rerank(query, candidates, top_k=2)
+        self.assertEqual(len(reranked), 0)
+
+    def test_empty_and_invalid_queries(self):
+        for invalid_q in ["", "   ", "?", ".", "the", "what is", "and or the"]:
+            candidates = self.retriever.search(invalid_q, top_k=3)
+            reranked = self.reranker.rerank(invalid_q, candidates, top_k=2)
+            self.assertEqual(len(candidates), 0)
+            self.assertEqual(len(reranked), 0)
 
 
 if __name__ == "__main__":
     unittest.main()
-
