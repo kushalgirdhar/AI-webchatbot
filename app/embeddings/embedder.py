@@ -11,14 +11,14 @@ class EmbeddingModel:
     def __init__(self):
         self.model = SentenceTransformer(self.MODEL_NAME)
 
-    def encode(self, texts):
+    def encode(self, texts, show_progress_bar=False):
         """
         Convert one or more texts into embedding vectors.
         """
         return self.model.encode(
             texts,
             normalize_embeddings=True,
-            show_progress_bar=True,
+            show_progress_bar=show_progress_bar,
         )
 
     @property
@@ -26,4 +26,4 @@ class EmbeddingModel:
         """
         Return embedding vector dimension.
         """
-        self.model.get_embedding_dimension()
+        return self.model.get_embedding_dimension()

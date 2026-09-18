@@ -1,9 +1,11 @@
 import unittest
+from unittest.mock import MagicMock
 
 from app.chunking.chunker import create_chunks_from_section, parse_markdown_sections
 from app.cleaner.text_cleaner import clean_markdown
 from app.markdown.converter import convert_to_markdown
 from app.retrieval.bm25 import BM25Retriever
+from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.reranker import DeterministicReranker
 from app.retrieval.term_coverage import calculate_term_coverage
 from app.retrieval.text_processor import STOP_WORDS, tokenize
@@ -151,15 +153,15 @@ class TestRetrievalAndReranker(unittest.TestCase):
         )
         self.assertEqual(
             DeterministicReranker.detect_query_intent("What effects do human activities have on water?"),
-            "CAUSE_EFFECT"
+            "CAUSE_EFFECT",
         )
         self.assertEqual(
             DeterministicReranker.detect_query_intent("Where does the majority of water occur?"),
-            "LOCATION"
+            "LOCATION",
         )
         self.assertEqual(
             DeterministicReranker.detect_query_intent("How is the natural environment defined?"),
-            "DEFINITION"
+            "DEFINITION",
         )
 
     def test_cause_effect_intent_selects_impact_chunk(self):
@@ -186,6 +188,74 @@ class TestRetrievalAndReranker(unittest.TestCase):
             reranked = self.reranker.rerank(invalid_q, candidates, top_k=2)
             self.assertEqual(len(candidates), 0)
             self.assertEqual(len(reranked), 0)
+
+
+class TestHybridRetriever(unittest.TestCase):
+    def setUp(self):
+        self.chunks = [
+            {
+                "id": 10,
+                "text": "Geological Activity\n\nThe lithosphere is the outermost solid crust of the planet.",
+                "metadata": {
+                    "title": "Natural Environment",
+                    "section": "Geological Activity",
+                    "heading_path": ["Natural Environment", "Geological Activity"],
+                },
+            },
+            {
+                "id": 20,
+                "text": "Cycles\n\nThe oxygen cycle occurs through the lithosphere and biosphere.",
+                "metadata": {
+                    "title": "Natural Environment",
+                    "section": "Cycles",
+                    "heading_path": ["Natural Environment", "Cycles"],
+                },
+            },
+        ]
+
+    def test_rrf_scoring_math(self):
+        retriever = HybridRetriever.__new__(HybridRetriever)
+        retriever.rrf_k = 60
+
+        bm25_res = [
+            {"chunk": self.chunks[1], "score": 4.5},  # chunk 20 at rank 1
+            {"chunk": self.chunks[0], "score": 3.0},  # chunk 10 at rank 2
+        ]
+
+        qdrant_p1 = MagicMock(id=10, score=0.85, payload={"text": self.chunks[0]["text"], "metadata": self.chunks[0]["metadata"]})
+        qdrant_p2 = MagicMock(id=20, score=0.40, payload={"text": self.chunks[1]["text"], "metadata": self.chunks[1]["metadata"]})
+        qdrant_res = [qdrant_p1, qdrant_p2]
+
+        fused = retriever.fuse_rrf(bm25_res, qdrant_res, rrf_k=60)
+
+        # Chunk 10 RRF: BM25 rank 2 (1/62) + Qdrant rank 1 (1/61)
+        expected_10 = (1.0 / 62) + (1.0 / 61)
+        # Chunk 20 RRF: BM25 rank 1 (1/61) + Qdrant rank 2 (1/62)
+        expected_20 = (1.0 / 61) + (1.0 / 62)
+
+        self.assertAlmostEqual(fused[0]["rrf_score"], expected_10, places=6)
+        self.assertAlmostEqual(fused[1]["rrf_score"], expected_20, places=6)
+
+    def test_rrf_prioritizes_dual_matches(self):
+        retriever = HybridRetriever.__new__(HybridRetriever)
+        retriever.rrf_k = 60
+
+        # Chunk 10 is present in both BM25 and Qdrant
+        # Chunk 20 is only in BM25
+        bm25_res = [
+            {"chunk": self.chunks[1], "score": 4.5},  # chunk 20 at rank 1
+            {"chunk": self.chunks[0], "score": 3.0},  # chunk 10 at rank 2
+        ]
+        qdrant_p1 = MagicMock(id=10, score=0.90, payload={"text": self.chunks[0]["text"], "metadata": self.chunks[0]["metadata"]})
+        qdrant_res = [qdrant_p1]
+
+        fused = retriever.fuse_rrf(bm25_res, qdrant_res, rrf_k=60)
+
+        # Chunk 10 RRF = 1/62 + 1/61 = ~0.03252
+        # Chunk 20 RRF = 1/61 + 0    = ~0.01639
+        self.assertEqual(fused[0]["chunk"]["id"], 10)
+        self.assertEqual(fused[1]["chunk"]["id"], 20)
+        self.assertTrue(fused[0]["rrf_score"] > fused[1]["rrf_score"])
 
 
 if __name__ == "__main__":

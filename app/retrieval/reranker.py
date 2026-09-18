@@ -72,7 +72,7 @@ ACTION_CAUSE_WORDS = {normalize_token(w) for w in ACTION_RAW}.union(set(ACTION_R
 class DeterministicReranker:
     """
     General-purpose, model-free deterministic reranker combining:
-    1. Baseline BM25 lexical score
+    1. Baseline candidate score (BM25 or fused candidate score)
     2. Query intent detection (Definition, Cause/Effect, Comparison, Location, Quantity, General)
     3. Subject entity coverage & full phrase matching
     4. Structural & section heading alignment
@@ -102,7 +102,7 @@ class DeterministicReranker:
 
     def rerank(self, query, results, top_k=5):
         """
-        Rerank BM25 candidate results deterministically.
+        Rerank candidate results deterministically.
         Returns an empty list for empty, invalid, or out-of-scope queries.
         """
         content_tokens = tokenize(query)
@@ -112,8 +112,10 @@ class DeterministicReranker:
         if not results:
             return []
 
-        # If highest candidate BM25 score is 0.0, indexed collection has no matching terms
-        if max(result.get("score", 0.0) for result in results) <= 0.0:
+        # If highest candidate score is 0.0, indexed collection has no matching candidates
+        has_bm25_match = max(result.get("bm25_score", result.get("score", 0.0)) for result in results) > 0.0
+        has_qdrant_match = max(result.get("qdrant_score", 0.0) for result in results) > 0.0
+        if not has_bm25_match and not has_qdrant_match and max(result.get("score", 0.0) for result in results) <= 0.0:
             return []
 
         subject_tokens = self.get_subject_tokens(query)
@@ -124,7 +126,9 @@ class DeterministicReranker:
 
         for result in results:
             chunk = result["chunk"]
-            bm25_score = result.get("score", 0.0)
+            bm25_score = result.get("bm25_score", result.get("score", 0.0))
+            rrf_score = result.get("rrf_score", None)
+            qdrant_score = result.get("qdrant_score", 0.0)
             text = chunk.get("text", "")
             metadata = chunk.get("metadata", {})
             section = metadata.get("section", "").lower()
@@ -184,38 +188,49 @@ class DeterministicReranker:
                 + (action_score * self.ACTION_WEIGHT)
             )
 
-            reranked_results.append(
-                {
-                    "chunk": chunk,
-                    "score": final_score,
-                    "bm25_score": bm25_score,
-                    "content_coverage": content_cov,
-                    "subject_coverage": subject_cov,
-                    "phrase_score": phrase_score,
-                    "definition_score": def_score,
-                    "heading_score": heading_score,
-                    "action_score": action_score,
-                    "lead_score": lead_score,
-                }
-            )
+            entry = {
+                "chunk": chunk,
+                "score": final_score,
+                "bm25_score": bm25_score,
+                "qdrant_score": qdrant_score,
+                "content_coverage": content_cov,
+                "subject_coverage": subject_cov,
+                "phrase_score": phrase_score,
+                "definition_score": def_score,
+                "heading_score": heading_score,
+                "action_score": action_score,
+                "lead_score": lead_score,
+            }
+            if rrf_score is not None:
+                entry["rrf_score"] = rrf_score
+            if "bm25_rank" in result:
+                entry["bm25_rank"] = result["bm25_rank"]
+            if "qdrant_rank" in result:
+                entry["qdrant_rank"] = result["qdrant_rank"]
+
+            reranked_results.append(entry)
 
         reranked_results.sort(key=lambda r: r["score"], reverse=True)
 
         # Relevance Threshold & Out-of-Scope Filter
         if reranked_results:
             top_res = reranked_results[0]
-            if top_res["bm25_score"] <= 0.0:
+            top_bm25 = top_res["bm25_score"]
+            top_qdrant = top_res["qdrant_score"]
+
+            if top_bm25 <= 0.0 and top_qdrant <= 0.0:
                 return []
             # Specific 2-word entities (like "artificial intelligence") must have full coverage or phrase match
             if (
                 len(subject_tokens) == 2
                 and top_res["subject_coverage"] < 1.0
                 and top_res["phrase_score"] == 0.0
-                and top_res["bm25_score"] < 4.0
+                and top_bm25 < 4.0
+                and top_qdrant < 0.65
             ):
                 return []
             # Multi-word queries with extremely low coverage across the entire document
-            if len(subject_tokens) > 2 and top_res["subject_coverage"] < 0.35:
+            if len(subject_tokens) > 2 and top_res["subject_coverage"] < 0.35 and top_qdrant < 0.65:
                 return []
 
         return reranked_results[:top_k]
